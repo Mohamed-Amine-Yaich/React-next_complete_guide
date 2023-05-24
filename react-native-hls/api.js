@@ -1,4 +1,4 @@
-export const authToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlrZXkiOiJhYzI4MGQxNS05ZGUyLTQyNDMtOTIzYS1hNDNlN2FhZGUyYTgiLCJwZXJtaXNzaW9ucyI6WyJhbGxvd19qb2luIl0sImlhdCI6MTY4NDc0Nzg5MywiZXhwIjoxNjg1MzUyNjkzfQ.27T54SjMqvGFyKRTQ-qEPuYmifaMtxz5iaP6rjplIYE'; // token should be in String format
+export const authToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcGlrZXkiOiJhMjY5ZmQxYS1mODk3LTRkNzgtOTc1Yi0wODI0MzBmOGQ2MWMiLCJwZXJtaXNzaW9ucyI6WyJhbGxvd19qb2luIl0sImlhdCI6MTY4NDkyMDI3OCwiZXhwIjoxNjg1NTI1MDc4fQ.Ehq0GcgYUiadkMhX-eUIoBF5uWXqmt-9245i7cUEPz0'; // token should be in String format
 
 // API call to create meeting
 export const createMeeting = async ({ token }) => {
@@ -25,7 +25,7 @@ export const getLiveMeetings = async (/* { token } */) => {
   });
   
   const data = await res.json();
-  console.log("live meetings", data);
+  console.log("live meetings", data.length);
 
   return data;
 };

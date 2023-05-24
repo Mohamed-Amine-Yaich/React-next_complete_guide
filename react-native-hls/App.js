@@ -20,6 +20,7 @@ import {
 } from "@videosdk.live/react-native-sdk";
 import { createMeeting, authToken, getLiveMeetings } from "./api";
 import Video from "react-native-video";
+import ViewerContainer from "./ViewerContainer";
 
 // Responsible for either schedule new meeting or to join existing meeting as a host or as a viewer.
 function JoinScreen({ getMeetingAndToken, setMode }) {
@@ -106,7 +107,6 @@ function ParticipantView({ participantId }) {
   const { webcamStream, webcamOn } = useParticipant(participantId);
   return webcamOn && webcamStream ? (
     <RTCView
-    
       streamURL={new MediaStream([webcamStream.track]).toURL()}
       objectFit={"cover"}
       style={{
@@ -291,6 +291,7 @@ function ViewerView({}) {
 
           {/* Render VideoPlayer that will play `downstreamUrl`*/}
           <Video
+            presentFullscreenPlayer
             controls={true}
             source={{
               uri: hlsUrls.downstreamUrl,
@@ -323,6 +324,22 @@ function Container() {
       console.log(error.message);
     },
   });
+
+  const mMeeting = useMeeting({
+    onMeetingJoined: () => {
+      // We will pin the local participant if he joins in CONFERENCE mode
+      if (mMeetingRef.current.localParticipant.mode == "CONFERENCE") {
+        mMeetingRef.current.localParticipant.pin();
+      }
+    },
+  });
+
+  // We will create a ref to meeting object so that when used inside the
+  // Callback functions, meeting state is maintained
+  const mMeetingRef = useRef(mMeeting);
+  useEffect(() => {
+    mMeetingRef.current = mMeeting;
+  }, [mMeeting]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -393,7 +410,7 @@ function App() {
   const getMeetingAndToken = async (id) => {
     if (id === "allRooms") {
       const res = await getLiveMeetings();
-      console.log(res);
+
       if (res) setAllRooms(res);
     } else {
       const meetingId =
@@ -401,75 +418,79 @@ function App() {
       setMeetingId(meetingId);
     }
   };
-console.log('app meetingid',meetingId)
- return !allRooms ? authToken && meetingId  ? (
-  <MeetingProvider
-    config={{
-      meetingId,
-      micEnabled: true,
-      webcamEnabled: true,
-      name: "Amine",
-      //These will be the mode of the participant CONFERENCE or VIEWER
-      mode: mode,
-    }}
-    token={authToken}
-  >
-   <Container />
-  </MeetingProvider>
-) :  <JoinScreen getMeetingAndToken={getMeetingAndToken} setMode={setMode} /> : <AllRooms allRooms={allRooms} setMeetingId={setMeetingId} />
 
-    
-  
+  return !allRooms ? (
+    authToken && meetingId ? (
+      <MeetingProvider
+        config={{
+          meetingId,
+          micEnabled: true,
+          webcamEnabled: true,
+          name: "Amine",
+          //These will be the mode of the participant CONFERENCE or VIEWER
+          mode: mode,
+        }}
+        token={authToken}
+      >
+        <Container />
+      </MeetingProvider>
+    ) : (
+      <JoinScreen getMeetingAndToken={getMeetingAndToken} setMode={setMode} />
+    )
+  ) : (
+    <AllRooms allRooms={allRooms} setMeetingId={setMeetingId} />
+  );
 }
 
 export default App;
 
 function AllRooms(props) {
-  // Get the Participant Map and meetingId
- /*  const {  participants } = useMeeting({});
-
-  // For getting speaker participant, we will filter out `CONFERENCE` mode participant
-  const speakers = useMemo(() => {
-    const speakerParticipants = [...participants.values()].filter(
-      (participant) => {
-        return participant.mode == Constants.modes.CONFERENCE;
-      }
-    );
-    return speakerParticipants;
-  }, [participants]);
-
-  console.log("all rooms", props.allRooms.data.length); */
-
-
   return (
     <SafeAreaView style={{ backgroundColor: "black", flex: 1 }}>
       {/* Render Header for copy meetingId and leave meeting*/}
       {/* <HeaderView /> */}
       {/* Render Participant List */}
-      {props.allRooms.data.length > 0 ? (
+      {props.allRooms.data&&props.allRooms.data?.length > 0 ? (
         <FlatList
-        scrollEnabled
+          scrollEnabled
           data={props.allRooms.data}
           renderItem={({ item }) => {
-            console.log('roomid : ',item)
             /*  return <ParticipantView participantId={item.id} />; */
-            return  <MeetingProvider
-            config={{
-              meetingId: item.roomId,
-              micEnabled: false,
-              webcamEnabled: false,
-              name: item.roomId,
-              //These will be the mode of the participant CONFERENCE or VIEWER
-              mode:'VIEWER',
-            }}
-            token={authToken}
-          >
-           <Room roomId={item.roomId} setMeetingId={props.setMeetingId} downstreamUrl={item.downstreamUrl}/>
-          </MeetingProvider>
-           
+            return (
+              <MeetingProvider
+                config={{
+                  meetingId: item.roomId,
+                  micEnabled: false,
+                  webcamEnabled: false,
+                  name: item.roomId,
+                  multiStream:false,
+                  //These will be the mode of the participant CONFERENCE or VIEWER
+                  mode: "VIEWER",
+                  
+                }}
+                token={authToken}
+                joinWithoutUserInteraction={true}
+              >
+                {item.downstreamUrl ? (
+                  <Room
+                    roomId={item.roomId}
+                    setMeetingId={props.setMeetingId}
+                    downstreamUrl={item.downstreamUrl}
+                  />
+                ) : (
+                  <Text style={{ color: "white", fontSize: 12 }}>
+                    No Downstream Url
+                  </Text>
+                )}
+              </MeetingProvider>
+            );
           }}
         />
-      ) : null}
+      ) : (
+        <Text style={{ color: "white", fontSize: 12 }}>
+          no live room available
+        </Text>
+      )}
 
       {/* Render Controls */}
       {/*    <Controls /> */}
@@ -478,87 +499,63 @@ function AllRooms(props) {
 }
 
 const Room = (props) => {
-  const { join, changeWebcam,hlsState, hlsUrls, participants ,localParticipant} = useMeeting();
-/*   useEffect(()=>{
- if(hlsState== "HLS_PLAYABLE"){
-  join()
-  setTimeout(() => {
-    changeWebcam();
-  }, 300);
- }
+  const {
+    join,
+    changeWebcam,
+    hlsState,
+    hlsUrls,
+    participants,
+    localParticipant,
   
- },[hlsState]) */
+  } = useMeeting();
 
- /*if(props?.roomId==undefined&& !hlsUrls.downstreamUrl){
-  return <Text>loading...</Text>
- }*/
 
- useEffect(()=>{
-  if(hlsState != "HLS_PLAYABLE"|| hlsState != "HLS_STARTED"){
-    join();
-    setTimeout(() => {
-      changeWebcam();
-    }, 300);
-  }
-   
-  },[hlsState])
+  useEffect(() => {
+    if (hlsState != "HLS_PLAYABLE" || hlsState != "HLS_STARTED") {
+      //I removed caue I change the meeting provide to joinwithoutuserInteraction
+      /*    join();
+      setTimeout(() => {
+        changeWebcam();
+      }, 300); */
+    }
+  }, [hlsState]);
 
-console.log(hlsUrls)
-console.log(props?.roomId,hlsState)
-console.log(localParticipant?.mode == Constants.modes.VIEWER)
-console.log(localParticipant?.mode == Constants.modes.CONFERENCE)
-console.log(props.downstreamUrl)
+  useEffect(() => {
+    if (localParticipant && localParticipant.mode == "CONFERENCE") {
+      localParticipant.pin();
+    }
+    if (localParticipant && localParticipant.mode == "VIEWER") {
+      /* localParticipant?.disableWebcam()
+      localParticipant?.consumeWebcamStreams()
+      localParticipant?.unpin() */
+      localParticipant?.stopConsumingMicStreams();
+      localParticipant?.stopConsumingWebcamStreams();
+    }
+  }, [localParticipant]);
+
   return (
-    <ScrollView contentContainerStyle={{flex: 1, backgroundColor: "black"}}>
-      {hlsState == "HLS_PLAYABLE"|| hlsState == "HLS_STARTED"&& (
-         <SafeAreaView style={{ flex: 1, backgroundColor: "red",height:300 }}>
-       {/*  <View style={{  borderWidth: 1, flex: 1 }}> */}
-         {/*  <Video
-           key={props.downstreamUrl}
-               source={{
-                uri: hlsUrls.downstreamUrl?hlsUrls.downstreamUrl:props.downstreamUrl,
+   /*  <ScrollView contentContainerStyle={{ flex: 1, backgroundColor: "black" }}>
+      {hlsState == "HLS_PLAYABLE" ||
+        (hlsState == "HLS_STARTED" && (
+          <SafeAreaView
+            style={{ flex: 1, backgroundColor: "black", height: 800 }}
+          >
+             <HeaderView />
+            <Video
+              key={props.downstreamUrl}
+              source={{
+                uri: props.downstreamUrl,
               }}
               resizeMode={"stretch"}
               style={{
                 flex: 1,
                 backgroundColor: "black",
-        
               }}
               onError={(e) => console.log("error", e)}
-            
-          /> */}
-           <RTCView
-          
-      streamURL={new MediaStreamTrack([props.downstreamUrl]).toURL()}
-      objectFit={"cover"}
-      style={{
-        height: 300,
-        marginVertical: 8,
-        marginHorizontal: 8,
-        borderColor:'red',
-        borderWidth:2,
-      }}
-    />
-       {/*  </View> */}
-        </SafeAreaView>
-      ) }{/* : (
-      <Button
-        btnStyle={{
-          marginTop: 8,
-          paddingHorizontal: 22,
-          padding: 12,
-          borderWidth: 1,
-          borderColor: "white",
-          borderRadius: 8,
-        }}
-        buttonText={`Join this room  ${props?.roomId}`}
-        onPress={() => {
-          join();
-          setTimeout(() => {
-            changeWebcam();
-          }, 300);
-        }}
-      />)} */}
-    </ScrollView>
+            />
+          </SafeAreaView>
+        ))}
+    </ScrollView> */
+    <ViewerContainer />
   );
 };
